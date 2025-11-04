@@ -201,23 +201,28 @@ class FirestoreService {
     }
   }
   // 1. Criar um novo "molde" de transação recorrente
-  Future<void> createRecurringTransaction(RecurringTransactionModel recurring) async {
+  // lib/services/firestore_service.dart
+
+  // 1. Criar um novo "molde" de transação recorrente
+  Future<String> createRecurringTransaction(RecurringTransactionModel recurring) async {
     final User? currentUser = _auth.currentUser;
     if (currentUser == null) throw Exception("Usuário não autenticado.");
 
     try {
       // Salva na nova subcoleção 'recurring_transactions'
-      await _firestore
+      final docRef = await _firestore
           .collection('users')
           .doc(currentUser.uid)
           .collection('recurring_transactions')
           .add(recurring.toJson());
+      
+      return docRef.id; // <-- MUDANÇA AQUI: Retorna o ID do novo documento
+      
     } catch (e) {
       print("Erro ao criar transação recorrente: $e");
       throw Exception("Falha ao criar transação recorrente.");
     }
   }
-
   // 2. Ler todos os "moldes" recorrentes (Stream)
   // Usado para a tela de gerenciamento
   Stream<List<RecurringTransactionModel>> getRecurringTransactionsStream() {
@@ -276,6 +281,9 @@ class FirestoreService {
       throw Exception("Falha ao deletar recorrente.");
     }
   }
+  // lib/services/firestore_service.dart
+
+  // 5. LANÇAR TRANSAÇÕES RECORRENTES (VERSÃO CORRIGIDA - SEM BATCH)
   Future<void> postRecurringTransactions(
     List<RecurringTransactionModel> transactionsToPost,
     DateTime postDate,
@@ -283,21 +291,20 @@ class FirestoreService {
     final User? currentUser = _auth.currentUser;
     if (currentUser == null) throw Exception("Usuário não autenticado.");
 
-    // 1. Cria um "lote" (batch) de escritas no Firestore
-    final WriteBatch batch = _firestore.batch();
+    // Vamos iterar e fazer duas chamadas 'await' separadas
+    // em vez de usar um WriteBatch.
     
-    // Pega o último dia válido do mês atual
     final int lastDayOfMonth = DateTime(postDate.year, postDate.month + 1, 0).day;
 
     for (var model in transactionsToPost) {
-      // 2. Garante que o dia é válido (evita bug de "dia 31" em Fevereiro)
+      // 1. Garante que o dia é válido (evita bug de "dia 31" em Fevereiro)
       int day = model.dayOfMonth;
       if (day > lastDayOfMonth) {
         day = lastDayOfMonth;
       }
       final dateToPost = DateTime(postDate.year, postDate.month, day);
 
-      // 3. Cria a nova transação (a transação real)
+      // 2. Cria a nova transação (a transação real)
       final newTransaction = TransactionModel(
         description: model.description,
         amount: model.amount,
@@ -306,37 +313,40 @@ class FirestoreService {
         date: dateToPost,
       );
 
-      // 4. Define o "endereço" da nova transação e do "molde"
-      // Endereço do novo documento de transação
-      final newTransactionRef = _firestore
+      try {
+        // 3. Operação 1: Adicionar a nova transação
+        // (Usamos o método que já sabemos que funciona!)
+        await addTransaction(newTransaction);
+        
+        // 4. Operação 2: Atualizar a data do "molde" recorrente
+        // (Usamos o método que já existe!)
+        await updateRecurringTransactionPostedDate(
+            model.id!, postDate.month, postDate.year);
+            
+      } catch (e) {
+        // Se qualquer uma das etapas falhar, nós paramos e avisamos.
+        print("Erro ao postar transação recorrente: $e");
+        throw Exception("Falha ao lançar ${model.description}.");
+      }
+    }
+  }
+Future<void> deleteTransaction(String transactionId) async {
+    final User? currentUser = _auth.currentUser;
+    if (currentUser == null) throw Exception("Usuário não autenticado.");
+
+    try {
+      // Navega até a transação específica e a deleta
+      await _firestore
           .collection('users')
           .doc(currentUser.uid)
           .collection('transactions')
-          .doc(); // Gera um ID novo
-      
-      // Endereço do "molde" recorrente que precisa ser atualizado
-      final recurringDocRef = _firestore
-          .collection('users')
-          .doc(currentUser.uid)
-          .collection('recurring_transactions')
-          .doc(model.id!);
-      
-      // 5. Adiciona as operações ao lote
-      
-      // Operação 1: Criar a nova transação
-      batch.set(newTransactionRef, newTransaction.toJson());
-      
-      // Operação 2: Atualizar o "molde" recorrente
-      batch.update(recurringDocRef, {
-        'lastPostedMonth': postDate.month,
-        'lastPostedYear': postDate.year,
-      });
+          .doc(transactionId)
+          .delete();
+    } catch (e) {
+      print("Erro ao deletar transação: $e");
+      throw Exception("Falha ao deletar transação.");
     }
-
-    // 6. Executa todas as operações de uma só vez
-    await batch.commit();
   }
-
   // Método para LER todas as transações em tempo real (Stream)
   Stream<List<TransactionModel>> getTransactionsStream() {
     // 1. Pegar o usuário logado

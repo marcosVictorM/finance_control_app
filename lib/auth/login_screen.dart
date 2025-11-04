@@ -1,7 +1,9 @@
 // lib/auth/login_screen.dart
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart'; // Importamos nosso serviço
-import 'register_screen.dart'; // Importamos a tela de cadastro (vamos criar)
+import '../services/auth_service.dart';
+import 'register_screen.dart';
+// 1. IMPORTAR O PACOTE DE AUTH (para ler o tipo de erro)
+import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -11,58 +13,66 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // Controladores para os campos de texto
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-
-  // Instância do nosso serviço de autenticação
   final AuthService _authService = AuthService();
-
-  // Estado de loading
   bool _isLoading = false;
 
-  // Função para lidar com o login
-  void _signIn() async {
-    // Se não estiver carregando
-    if (_isLoading) return;
+  // 2. NOVA FUNÇÃO (Helper para mostrar o erro)
+  void _showErrorSnackbar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
 
-    // Atualiza o estado para mostrar o "loading"
-    setState(() {
-      _isLoading = true;
-    });
+  // 3. FUNÇÃO DE LOGIN (Atualizada com o 'catch' inteligente)
+  void _signIn() async {
+    if (_isLoading) return;
+    setState(() { _isLoading = true; });
 
     try {
-      // Tenta fazer o login usando nosso serviço
+      // Tenta fazer o login
       await _authService.signInWithEmailAndPassword(
-        _emailController.text,
-        _passwordController.text,
+        _emailController.text.trim(), // .trim() remove espaços
+        _passwordController.text.trim(),
       );
       
-      // Se o login for bem-sucedido, o 'AuthGate' vai
-      // automaticamente nos levar para a 'HomeScreen'.
-      // Não precisamos fazer nada aqui.
+    } on FirebaseAuthException catch (e) {
+      // --- A MÁGICA ACONTECE AQUI ---
+      // Lemos o "código" do erro que o Firebase nos deu
+      String errorMessage;
+      switch (e.code) {
+        case 'user-not-found':
+        case 'invalid-email':
+        case 'invalid-credential':
+          errorMessage = 'E-mail ou senha incorretos.';
+          break;
+        case 'wrong-password':
+           errorMessage = 'E-mail ou senha incorretos.';
+          break;
+        case 'user-disabled':
+          errorMessage = 'Este usuário foi desabilitado.';
+          break;
+        default:
+          errorMessage = 'Ocorreu um erro. Tente novamente.';
+          print('Erro de Login não tratado: ${e.code}');
+      }
+      _showErrorSnackbar(errorMessage);
 
     } catch (e) {
-      // Se der erro, mostra um feedback para o usuário
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Falha no login: Verifique seu e-mail e senha."),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // Captura qualquer outro erro
+      _showErrorSnackbar('Ocorreu um erro inesperado.');
     } finally {
-      // Independente de sucesso ou falha, para de carregar
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() { _isLoading = false; });
       }
     }
   }
 
-  // Função para navegar para a tela de cadastro
   void _navigateToRegister() {
     Navigator.push(
       context,
@@ -72,6 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ... (O resto do seu 'build' continua exatamente igual) ...
     return Scaffold(
       appBar: AppBar(
         title: const Text('Login'),
@@ -80,11 +91,10 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Center(
-          child: SingleChildScrollView( // Evita que o teclado quebre a tela
+          child: SingleChildScrollView(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Campo de E-mail
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -94,21 +104,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
-                // Campo de Senha
                 TextField(
                   controller: _passwordController,
-                  obscureText: true, // Esconde a senha
+                  obscureText: true,
                   decoration: const InputDecoration(
                     labelText: 'Senha',
                     border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 24),
-                
-                // Botão de Entrar
                 _isLoading
-                    ? const CircularProgressIndicator() // Mostra o loading
+                    ? const CircularProgressIndicator()
                     : ElevatedButton(
                         onPressed: _signIn,
                         style: ElevatedButton.styleFrom(
@@ -116,10 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         child: const Text('Entrar'),
                       ),
-                
                 const SizedBox(height: 16),
-                
-                // Botão para ir para a tela de Cadastro
                 TextButton(
                   onPressed: _navigateToRegister,
                   child: const Text('Não tem uma conta? Cadastre-se'),

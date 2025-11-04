@@ -1,6 +1,7 @@
 // lib/auth/register_screen.dart
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart'; // Importamos nosso serviço
+import '../services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart'; 
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -10,43 +11,40 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  // Controladores
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
-
-  // Instância do serviço
   final AuthService _authService = AuthService();
-
-  // Estado de loading
   bool _isLoading = false;
 
-  // Função para lidar com o cadastro
+  // 2. NOVA FUNÇÃO Helper para mostrar o erro
+  void _showErrorSnackbar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  // 3. FUNÇÃO DE CADASTRO 
   void _signUp() async {
     if (_isLoading) return;
 
-    // 1. Validar se as senhas são iguais
     if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("As senhas não conferem!"),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return; // Para a execução
+      _showErrorSnackbar("As senhas não conferem!");
+      return;
     }
 
-    // 2. Iniciar o Loading
     setState(() { _isLoading = true; });
 
     try {
-      // 3. Tentar criar o usuário
       await _authService.createUserWithEmailAndPassword(
-        _emailController.text,
-        _passwordController.text,
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
       );
 
-      // 4. Se der certo, mostra feedback e fecha a tela
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -54,20 +52,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context); // Volta para a tela de Login
+        Navigator.pop(context);
       }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage;
+      switch (e.code) {
+        case 'email-already-in-use':
+          errorMessage = 'Este e-mail já está em uso. Tente fazer login.';
+          break;
+        case 'weak-password':
+          errorMessage = 'Senha muito fraca. Tente uma senha mais forte.';
+          break;
+        case 'invalid-email':
+          errorMessage = 'Este e-mail não é válido.';
+          break;
+        default:
+          errorMessage = 'Ocorreu um erro. Tente novamente.';
+          print('Erro de Cadastro não tratado: ${e.code}');
+      }
+      _showErrorSnackbar(errorMessage);
+
     } catch (e) {
-      // 5. Se der erro
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Falha ao criar conta: ${e.toString()}"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showErrorSnackbar('Ocorreu um erro inesperado.');
     } finally {
-      // 6. Parar o loading
       if (mounted) {
         setState(() { _isLoading = false; });
       }
@@ -88,7 +95,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Campo de E-mail
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -98,8 +104,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
-                // Campo de Senha
                 TextField(
                   controller: _passwordController,
                   obscureText: true,
@@ -109,8 +113,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // Campo de Confirmar Senha
                 TextField(
                   controller: _confirmPasswordController,
                   obscureText: true,
@@ -120,8 +122,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                
-                // Botão de Cadastrar
                 _isLoading
                     ? const CircularProgressIndicator()
                     : ElevatedButton(
@@ -131,13 +131,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                         child: const Text('Cadastrar'),
                       ),
-                
                 const SizedBox(height: 16),
-                
-                // Botão para voltar ao Login
                 TextButton(
                   onPressed: () {
-                    Navigator.pop(context); // Apenas fecha esta tela
+                    Navigator.pop(context);
                   },
                   child: const Text('Já tem uma conta? Faça o login'),
                 ),

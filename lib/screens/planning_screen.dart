@@ -97,7 +97,45 @@ class _PlanningScreenState extends State<PlanningScreen> {
       },
     );
   }
+// lib/screens/planning_screen.dart
 
+// ... (dentro da classe _PlanningScreenState) ...
+
+  // NOVA FUNÇÃO: Diálogo de confirmação para excluir
+  void _showDeleteBudgetDialog(BudgetModel budget) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Excluir Orçamento'),
+          content: Text('Tem certeza que deseja excluir o orçamento da categoria "${budget.category}"?'),
+          actions: [
+            TextButton(
+              child: const Text('Cancelar'),
+              onPressed: () => Navigator.pop(context),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Excluir'),
+              onPressed: () {
+                // Chama o serviço que já existe
+                _firestoreService.deleteBudget(budget.id!);
+                Navigator.pop(context); // Fecha o diálogo
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Orçamento "${budget.category}" excluído.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+  // 3. O "Cérebro" da tela: combina os dados de 2 Streams
   // 3. O "Cérebro" da tela: combina os dados de 2 Streams
   Widget _buildBudgetsView(List<BudgetModel> budgets, List<TransactionModel> transactions) {
     
@@ -139,49 +177,56 @@ class _PlanningScreenState extends State<PlanningScreen> {
         if (progress >= 1.0) progressColor = Colors.red;
 
         // 5. O Card do Orçamento
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Linha 1: Título e Limite
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      budget.category,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                    Text(
-                      'R\$ ${budget.limitAmount.toStringAsFixed(2)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                
-                // Linha 2: Barra de Progresso
-                LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 12,
-                  borderRadius: BorderRadius.circular(6),
-                  backgroundColor: Colors.grey.shade300,
-                  valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-                ),
-                const SizedBox(height: 8),
+        // --- INÍCIO DA MUDANÇA (Envolvemos o Card com InkWell) ---
+        return InkWell(
+          onLongPress: () {
+            _showDeleteBudgetDialog(budget);
+          },
+          child: Card(
+            elevation: 2,
+            margin: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Linha 1: Título e Limite
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        budget.category,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                      Text(
+                        'R\$ ${budget.limitAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Linha 2: Barra de Progresso
+                  LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 12,
+                    borderRadius: BorderRadius.circular(6),
+                    backgroundColor: Colors.grey.shade300,
+                    valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                  ),
+                  const SizedBox(height: 8),
 
-                // Linha 3: Texto (Gasto / Limite)
-                Text(
-                  'Gasto: R\$ ${currentSpending.toStringAsFixed(2)} de R\$ ${budget.limitAmount.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ],
+                  // Linha 3: Texto (Gasto / Limite)
+                  Text(
+                    'Gasto: R\$ ${currentSpending.toStringAsFixed(2)} de R\$ ${budget.limitAmount.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ],
+              ),
             ),
           ),
         );
+        // --- FIM DA MUDANÇA ---
       },
     );
   }

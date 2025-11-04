@@ -68,6 +68,40 @@ class _ShoppingListsScreenState extends State<ShoppingListsScreen> {
     ),
   );
 }
+// NOVA FUNÇÃO: Diálogo de confirmação para excluir
+  void _showDeleteListDialog(ShoppingListModel list) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Excluir Lista'),
+          content: Text('Tem certeza que deseja excluir a lista "${list.listName}"? Todos os seus itens serão perdidos.'),
+          actions: [
+            TextButton(
+              child: const Text('Cancelar'),
+              onPressed: () => Navigator.pop(context),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Excluir'),
+              onPressed: () {
+                // Chama o serviço que já existe
+                _firestoreService.deleteShoppingList(list.id!);
+                Navigator.pop(context); // Fecha o diálogo
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Lista "${list.listName}" excluída.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +152,12 @@ class _ShoppingListsScreenState extends State<ShoppingListsScreen> {
                   subtitle: Text('$checkedCount / $itemCount itens comprados'),
                   trailing: const Icon(Icons.arrow_forward_ios),
                   onTap: () => _navigateToListDetail(list),
-                  // (Vamos adicionar o 'delete' depois, com um long-press)
+                  
+                  // --- INÍCIO DA MUDANÇA ---
+                  onLongPress: () {
+                    _showDeleteListDialog(list);
+                  },
+                  // --- FIM DA MUDANÇA ---
                 ),
               );
             },
