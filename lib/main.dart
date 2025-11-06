@@ -8,10 +8,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart'; 
 
 import 'package:app_financas/auth/auth_gate.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 
 void main() async {
   // 3. Garante que o Flutter esteja pronto antes de chamar o Firebase
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('pt_BR', null);
   
   // 4. Inicializa o Firebase usando as opções do arquivo gerado
   await Firebase.initializeApp(

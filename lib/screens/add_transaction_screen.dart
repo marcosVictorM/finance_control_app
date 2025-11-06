@@ -6,24 +6,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class AddTransactionScreen extends StatefulWidget {
-  // --- MUDANÇA 1: Adicionar campos para pré-preenchimento ---
   final String? initialDescription;
   final double? initialAmount;
+  final TransactionModel? transactionToEdit;
   
-  // O construtor agora aceita os valores iniciais (opcionais)
   const AddTransactionScreen({
     super.key, 
     this.initialDescription, 
     this.initialAmount,
+    this.transactionToEdit,
   });
-  // --- FIM MUDANÇA 1 ---
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
 }
 
 class _AddTransactionScreenState extends State<AddTransactionScreen> {
-  // Controladores agora são inicializados no initState
   late TextEditingController _descriptionController;
   late TextEditingController _amountController;
   final _dayController = TextEditingController();
@@ -31,7 +29,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   bool _isRecurring = false; 
   final _firestoreService = FirestoreService();
 
-  // (Listas de categorias não mudam)
   final List<String> _expenseCategories = [
     'Moradia', 'Alimentação', 'Transporte', 'Lazer', 
     'Saúde', 'Dívidas', 'Financiamentos', 'Educacional', 'Assinaturas e Serviços'
@@ -42,31 +39,47 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   String? _selectedCategory;
   DateTime _selectedDate = DateTime.now(); 
   bool _isLoading = false;
+  bool _isEditing = false;
 
-  // --- MUDANÇA 2: Inicializar os controladores ---
+  // --- MUDANÇA 1: Novas variáveis de estado ---
+  final List<String> _paymentMethods = [
+    'Dinheiro', 
+    'Pix', 
+    'Cartão de Débito', 
+    'Cartão de Crédito',
+    'Transferência Bancária'
+  ];
+  String? _selectedPaymentMethod;
+  // --- FIM MUDANÇA 1 ---
+
   @override
   void initState() {
     super.initState();
-    // Pré-preenche os campos se os valores foram passados
-    _descriptionController = TextEditingController(text: widget.initialDescription);
+    
+    _isEditing = widget.transactionToEdit != null;
+
+    _descriptionController = TextEditingController(text: widget.transactionToEdit?.description ?? widget.initialDescription);
     _amountController = TextEditingController(
-      text: widget.initialAmount != null 
-            ? widget.initialAmount!.toStringAsFixed(2) 
-            : null
+      text: (widget.transactionToEdit?.amount ?? widget.initialAmount)?.toStringAsFixed(2)
     );
+
+    if (_isEditing) {
+      _selectedType = widget.transactionToEdit!.type;
+      _selectedCategory = widget.transactionToEdit!.category;
+      _selectedDate = widget.transactionToEdit!.date;
+      // --- MUDANÇA 2: Pré-preencher o método de pagamento ---
+      _selectedPaymentMethod = widget.transactionToEdit!.paymentMethod;
+      // --- FIM MUDANÇA 2 ---
+      _isRecurring = false;
+    } else if (widget.initialAmount != null) {
+      // Veio da lista de compras
+      _selectedType = 'expense';
+    }
   }
-  // --- FIM MUDANÇA 2 ---
 
-  // (O resto do arquivo: _showPostNowDialog, _saveTransaction, build...
-  // ... não muda nada. Copie e cole o resto do seu arquivo aqui)
-  
-  // (Cole aqui as funções _showPostNowDialog e _saveTransaction que já funcionam)
-  // ...
-  // ... (vou colar por segurança para garantir que esteja completo) ...
-
+  // (A função _showPostNowDialog não muda)
   void _showPostNowDialog(RecurringTransactionModel newRecurringWithId, BuildContext addTransactionContext) {
     bool isPosting = false; 
-    
     showDialog(
       context: context, 
       barrierDismissible: false,
@@ -76,42 +89,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             return AlertDialog(
               title: const Text('Lançar Transação?'),
               content: isPosting 
-                ? const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('Lançando...'),
-                    ],
-                  )
+                ? const Column( mainAxisSize: MainAxisSize.min, children: [ CircularProgressIndicator(), SizedBox(height: 16), Text('Lançando...'), ],)
                 : Text('Deseja lançar "${newRecurringWithId.description}" para o mês atual?'),
               actions: isPosting ? [] : [
                 TextButton(
                   child: const Text('Não'),
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    Navigator.pop(addTransactionContext);
-                  },
+                  onPressed: () { Navigator.pop(dialogContext); Navigator.pop(addTransactionContext); },
                 ),
                 ElevatedButton(
                   child: const Text('Sim, Lançar'),
                   onPressed: () async {
                     setDialogState(() { isPosting = true; });
-
                     try {
                       await _firestoreService.postRecurringTransactions([newRecurringWithId], DateTime.now());
-                      
-                      if (mounted) {
-                         Navigator.pop(dialogContext);
-                         Navigator.pop(addTransactionContext);
-                      }
+                      if (mounted) { Navigator.pop(dialogContext); Navigator.pop(addTransactionContext); }
                     } catch (e) {
                       setDialogState(() { isPosting = false; });
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Erro ao lançar: $e'), backgroundColor: Colors.red),
-                        );
-                      }
+                      if (mounted) { ScaffoldMessenger.of(context).showSnackBar( SnackBar(content: Text('Erro ao lançar: $e'), backgroundColor: Colors.red), ); }
                     }
                   },
                 ),
@@ -123,17 +117,92 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     );
   }
 
+  // --- MUDANÇA 3: Atualizar a lógica de salvamento ---
+  Future<void> _handleUpdate() async {
+    final updatedTransaction = TransactionModel(
+      id: widget.transactionToEdit!.id,
+      description: _descriptionController.text,
+      amount: double.tryParse(_amountController.text) ?? 0.0,
+      type: _selectedType,
+      category: _selectedCategory!,
+      date: _selectedDate,
+      // Passa o método de pagamento (ou null se for receita)
+      paymentMethod: _selectedType == 'expense' ? _selectedPaymentMethod : null,
+    );
+    
+    await _firestoreService.updateTransaction(widget.transactionToEdit!.id!, updatedTransaction);
+    
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Transação atualizada!'), backgroundColor: Colors.green),
+      );
+    }
+  }
+
+  // (_handleCreateRecurring não muda, pois não salva paymentMethod)
+  Future<void> _handleCreateRecurring() async {
+    final day = int.tryParse(_dayController.text);
+    if (day == null || day < 1 || day > 31) throw Exception("Dia do mês inválido.");
+    
+    final newRecurring = RecurringTransactionModel(
+      description: _descriptionController.text,
+      amount: double.tryParse(_amountController.text) ?? 0.0,
+      type: _selectedType,
+      category: _selectedCategory!,
+      dayOfMonth: day,
+    );
+    
+    final String newId = await _firestoreService.createRecurringTransaction(newRecurring);
+    
+    final RecurringTransactionModel newRecurringWithId = RecurringTransactionModel(
+      id: newId, 
+      description: newRecurring.description,
+      amount: newRecurring.amount,
+      type: newRecurring.type,
+      category: newRecurring.category,
+      dayOfMonth: newRecurring.dayOfMonth,
+    );
+    
+    if (mounted) {
+      _showPostNowDialog(newRecurringWithId, context); 
+    }
+  }
+
+  Future<void> _handleCreateNormal() async {
+    final newTransaction = TransactionModel(
+      description: _descriptionController.text,
+      amount: double.tryParse(_amountController.text) ?? 0.0,
+      type: _selectedType,
+      category: _selectedCategory!,
+      date: _selectedDate,
+      // Passa o método de pagamento (ou null se for receita)
+      paymentMethod: _selectedType == 'expense' ? _selectedPaymentMethod : null,
+    );
+    
+    await _firestoreService.addTransaction(newTransaction);
+    
+    if (mounted) {
+      Navigator.pop(context); 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Transação salva!'), backgroundColor: Colors.green),
+      );
+    }
+  }
+
+  // (_saveTransaction não muda)
   Future<void> _saveTransaction() async {
     if (_amountController.text.isEmpty || 
         _descriptionController.text.isEmpty || 
         _selectedCategory == null ||
-        (_isRecurring && _dayController.text.isEmpty)
+        (_isRecurring && _dayController.text.isEmpty) ||
+        // Validação extra: se for despesa (não recorrente/editando), precisa de método de pagamento?
+        // Vamos deixar opcional por enquanto.
+        // (_selectedType == 'expense' && !_isRecurring && !_isEditing && _selectedPaymentMethod == null)
+        false
         ) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor, preencha todos os campos obrigatórios.'),
-          backgroundColor: Colors.orange,
-        ),
+        const SnackBar(content: Text('Por favor, preencha todos os campos obrigatórios.')),
       );
       return;
     }
@@ -141,65 +210,17 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     setState(() { _isLoading = true; });
 
     try {
-      final description = _descriptionController.text;
-      final amount = double.tryParse(_amountController.text) ?? 0.0;
-
-      if (_isRecurring) {
-        final day = int.tryParse(_dayController.text);
-        if (day == null || day < 1 || day > 31) {
-           throw Exception("Dia do mês inválido.");
-        }
-
-        final newRecurring = RecurringTransactionModel(
-          description: description,
-          amount: amount,
-          type: _selectedType,
-          category: _selectedCategory!,
-          dayOfMonth: day,
-        );
-
-        final String newId = await _firestoreService.createRecurringTransaction(newRecurring);
-
-        final RecurringTransactionModel newRecurringWithId = RecurringTransactionModel(
-          id: newId, 
-          description: newRecurring.description,
-          amount: newRecurring.amount,
-          type: newRecurring.type,
-          category: newRecurring.category,
-          dayOfMonth: newRecurring.dayOfMonth,
-        );
-        
-        if (mounted) {
-          _showPostNowDialog(newRecurringWithId, context); 
-        }
-
+      if (_isEditing) {
+        await _handleUpdate();
+      } else if (_isRecurring) {
+        await _handleCreateRecurring();
       } else {
-        final newTransaction = TransactionModel(
-          description: description,
-          amount: amount,
-          type: _selectedType,
-          category: _selectedCategory!,
-          date: _selectedDate, 
-        );
-        await _firestoreService.addTransaction(newTransaction);
-        
-        if (mounted) {
-          Navigator.pop(context); 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Transação salva!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+        await _handleCreateNormal();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao salvar: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Erro ao salvar: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -208,20 +229,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
        }
     }
   }
+  // --- FIM MUDANÇA 3 ---
   
   @override
   Widget build(BuildContext context) {
     final currentCategories = _selectedType == 'expense' 
         ? _expenseCategories 
         : _incomeCategories;
-    
     if (_selectedCategory != null && !currentCategories.contains(_selectedCategory)) {
       _selectedCategory = null;
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Adicionar Transação'),
+        title: Text(_isEditing ? 'Editar Transação' : 'Adicionar Transação'),
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator()) 
@@ -230,29 +251,32 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // (SegmentedButton de Tipo não muda)
                 SegmentedButton<String>(
                   segments: const [
                     ButtonSegment(value: 'expense', label: Text('Despesa'), icon: Icon(Icons.arrow_downward)),
                     ButtonSegment(value: 'income', label: Text('Receita'), icon: Icon(Icons.arrow_upward)),
                   ],
                   selected: {_selectedType},
-                  onSelectionChanged: (newSelection) {
+                  onSelectionChanged: _isEditing ? null : (newSelection) {
                     setState(() {
                       _selectedType = newSelection.first;
                     });
                   },
                 ),
                 const SizedBox(height: 24),
+                // (TextField de Descrição não muda)
                 TextField(
-                  controller: _descriptionController, // Agora inicializado no initState
+                  controller: _descriptionController,
                   decoration: const InputDecoration(
                     labelText: 'Descrição',
                     border: OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
+                // (TextField de Valor não muda)
                 TextField(
-                  controller: _amountController, // Agora inicializado no initState
+                  controller: _amountController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                     labelText: 'Valor (R\$)',
@@ -260,6 +284,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                // (Dropdown de Categoria não muda)
                 DropdownButtonFormField<String>(
                   value: _selectedCategory,
                   hint: const Text('Selecione uma categoria'),
@@ -278,11 +303,38 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     });
                   },
                 ),
+                
+                // --- MUDANÇA 4: Adicionar o Dropdown de Método de Pagamento ---
+                // Só mostra se for 'Despesa' E não for 'Recorrente'
+                if (_selectedType == 'expense' && !_isRecurring) ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: _selectedPaymentMethod,
+                    hint: const Text('Método de Pagamento (Opcional)'),
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _paymentMethods.map((method) {
+                      return DropdownMenuItem(
+                        value: method,
+                        child: Text(method),
+                      );
+                    }).toList(),
+                    onChanged: (newValue) {
+                      setState(() {
+                        _selectedPaymentMethod = newValue;
+                      });
+                    },
+                  ),
+                ],
+                // --- FIM MUDANÇA 4 ---
+
                 const SizedBox(height: 16),
+                // (Switch de Recorrente não muda)
                 SwitchListTile(
                   title: const Text('É uma transação recorrente?'),
                   value: _isRecurring,
-                  onChanged: (bool newValue) {
+                  onChanged: _isEditing ? null : (bool newValue) {
                     setState(() {
                       _isRecurring = newValue;
                     });
@@ -302,13 +354,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       inputFormatters: [ FilteringTextInputFormatter.digitsOnly ],
                     ),
                   ),
+                
                 const SizedBox(height: 32),
+                // (Botão de Salvar não muda)
                 ElevatedButton(
                   onPressed: _saveTransaction,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
                   ),
-                  child: const Text('Salvar Transação'),
+                  child: Text(_isEditing ? 'Atualizar Transação' : 'Salvar Transação'),
                 ),
               ],
             ),

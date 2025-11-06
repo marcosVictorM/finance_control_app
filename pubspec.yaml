@@ -39,6 +39,8 @@ dependencies:
   firebase_auth: ^6.1.1
   pie_chart: ^5.4.0
   intl: ^0.20.2
+  showcaseview: ^5.0.1
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:

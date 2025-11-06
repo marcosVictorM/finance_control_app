@@ -126,6 +126,23 @@ class FirestoreService {
       throw Exception("Falha ao deletar lista.");
     }
   }
+  Future<void> updateShoppingListName(String listId, String newName) async {
+    final User? currentUser = _auth.currentUser;
+    if (currentUser == null) throw Exception("Usuário não autenticado.");
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .collection('shopping_lists')
+          .doc(listId)
+          .update({'listName': newName}); // Atualiza apenas o campo 'listName'
+    } catch (e) {
+      print("Erro ao renomear lista: $e");
+      throw Exception("Falha ao renomear lista.");
+    }
+  }
+
   // 1. Criar um novo orçamento
   Future<void> createBudget(BudgetModel budget) async {
     final User? currentUser = _auth.currentUser;
@@ -328,6 +345,37 @@ class FirestoreService {
         print("Erro ao postar transação recorrente: $e");
         throw Exception("Falha ao lançar ${model.description}.");
       }
+    }
+  }
+  Stream<DocumentSnapshot<Map<String, dynamic>>> getUserDataStream() {
+  final User? currentUser = _auth.currentUser;
+  if (currentUser == null) {
+    // Retorna um stream vazio se o utilizador não estiver logado
+    return Stream.empty();
+  }
+
+  // Ouve o documento específico do utilizador
+  return _firestore
+      .collection('users')
+      .doc(currentUser.uid)
+      .snapshots();
+  }
+  Future<void> updateTransaction(String transactionId, TransactionModel updatedTransaction) async {
+    final User? currentUser = _auth.currentUser;
+    if (currentUser == null) throw Exception("Usuário não autenticado.");
+
+    try {
+      // Encontra o documento pelo ID e atualiza-o
+      // com os novos dados convertidos para JSON
+      await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .collection('transactions')
+          .doc(transactionId)
+          .update(updatedTransaction.toJson()); // 'update' sobrescreve os campos
+    } catch (e) {
+      print("Erro ao atualizar transação: $e");
+      throw Exception("Falha ao atualizar transação.");
     }
   }
 Future<void> deleteTransaction(String transactionId) async {

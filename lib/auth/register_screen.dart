@@ -14,6 +14,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
   final AuthService _authService = AuthService();
   bool _isLoading = false;
 
@@ -37,12 +38,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
+    if (_nameController.text.isEmpty) {
+    _showErrorSnackbar("Por favor, preencha o seu nome.");
+    return;
+    }
+
     setState(() { _isLoading = true; });
 
     try {
       await _authService.createUserWithEmailAndPassword(
         _emailController.text.trim(),
         _passwordController.text.trim(),
+        _nameController.text.trim(),
       );
 
       if (mounted) {
@@ -95,6 +102,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // 2. ADICIONE ESTE BLOCO DE CÓDIGO:
+                TextField(
+                  controller: _nameController,
+                  keyboardType: TextInputType.name,
+                  decoration: const InputDecoration(
+                    labelText: 'Nome',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,

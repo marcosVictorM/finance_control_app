@@ -102,7 +102,80 @@ class _ShoppingListsScreenState extends State<ShoppingListsScreen> {
       },
     );
   }
+  void _showEditListDialog(ShoppingListModel list) {
+  // Pré-preenche o campo com o nome atual
+  final TextEditingController nameController = TextEditingController(text: list.listName);
 
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Renomear Lista'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(labelText: "Novo nome da lista"),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            child: const Text('Cancelar'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          ElevatedButton(
+            child: const Text('Salvar'),
+            onPressed: () {
+              final newName = nameController.text;
+              if (newName.isNotEmpty) {
+                // 1. Chama o serviço para atualizar o Firestore
+                _firestoreService.updateShoppingListName(list.id!, newName);
+
+                // 2. Fecha o pop-up
+                Navigator.pop(context);
+
+                // 3. Dá o feedback
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Lista renomeada!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
+  void _showListOptionsDialog(ShoppingListModel list) {
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: Text(list.listName),
+        content: const Text('O que deseja fazer com esta lista?'),
+        actions: [
+          // Botão de Excluir
+          TextButton(
+            child: const Text('Excluir', style: TextStyle(color: Colors.red)),
+            onPressed: () {
+              Navigator.pop(context); // Fecha o menu de opções
+              _showDeleteListDialog(list); // Abre o diálogo de exclusão (que já existe)
+            },
+          ),
+          // Botão de Editar
+          ElevatedButton(
+            child: const Text('Renomear'),
+            onPressed: () {
+              Navigator.pop(context); // Fecha o menu de opções
+              _showEditListDialog(list); // Abre o diálogo de edição (que acabamos de criar)
+            },
+          ),
+        ],
+      );
+    },
+  );
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -155,7 +228,7 @@ class _ShoppingListsScreenState extends State<ShoppingListsScreen> {
                   
                   // --- INÍCIO DA MUDANÇA ---
                   onLongPress: () {
-                    _showDeleteListDialog(list);
+                    _showListOptionsDialog(list); // Chama o novo MENU de opções
                   },
                   // --- FIM DA MUDANÇA ---
                 ),

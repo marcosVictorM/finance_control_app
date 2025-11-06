@@ -2,9 +2,9 @@
 import 'package:app_financas/models/shopping_list_item_model.dart';
 import 'package:app_financas/models/shopping_list_model.dart';
 import 'package:app_financas/services/firestore_service.dart';
+import 'package:app_financas/screens/add_transaction_screen.dart'; // Import que já tínhamos
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Para o teclado numérico
-import 'add_transaction_screen.dart';
+import 'package:flutter/services.dart';
 
 class ListDetailScreen extends StatefulWidget {
   final ShoppingListModel shoppingList;
@@ -37,9 +37,7 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     }
   }
 
-  // 4. Função para mostrar o pop-up de "Adicionar Item"
   void _showAddItemDialog() {
-    // --- MUDANÇA 1: Adicionar controlador de preço ---
     final TextEditingController itemController = TextEditingController();
     final TextEditingController linkController = TextEditingController();
     final TextEditingController priceController = TextEditingController();
@@ -61,7 +59,6 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                 controller: linkController,
                 decoration: const InputDecoration(hintText: "Link (opcional)"),
               ),
-              // --- MUDANÇA 2: Adicionar campo de Valor ---
               TextField(
                 controller: priceController,
                 decoration: const InputDecoration(hintText: "Valor (opcional)"),
@@ -82,13 +79,12 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
               onPressed: () {
                 final itemName = itemController.text;
                 if (itemName.isNotEmpty) {
-                  // --- MUDANÇA 3: Pegar o valor e salvar no modelo ---
                   final price = double.tryParse(priceController.text);
                   
                   final newItem = ShoppingListItemModel(
                     itemName: itemName,
                     link: linkController.text.isNotEmpty ? linkController.text : null,
-                    price: price, // <-- Adicionado aqui
+                    price: price,
                   );
                   
                   setState(() {
@@ -104,13 +100,8 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
       },
     );
   }
-// lib/screens/list_detail_screen.dart
 
-// ... (dentro da classe _ListDetailScreenState) ...
-
-  // 7. NOVA FUNÇÃO: Mostrar o pop-up de "Editar Item"
   void _showEditItemDialog(ShoppingListItemModel itemToEdit, int index) {
-    // Pré-preenche os controladores com os dados existentes do item
     final TextEditingController itemController = TextEditingController(text: itemToEdit.itemName);
     final TextEditingController linkController = TextEditingController(text: itemToEdit.link);
     final TextEditingController priceController = TextEditingController(text: itemToEdit.price?.toStringAsFixed(2) ?? '');
@@ -153,21 +144,18 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                 final itemName = itemController.text;
                 if (itemName.isNotEmpty) {
                   final price = double.tryParse(priceController.text);
-                  
-                  // Cria o novo item atualizado
                   final updatedItem = ShoppingListItemModel(
                     itemName: itemName,
                     link: linkController.text.isNotEmpty ? linkController.text : null,
                     price: price,
-                    isChecked: itemToEdit.isChecked, // Mantém o status do checkbox
+                    isChecked: itemToEdit.isChecked,
                   );
                   
-                  // Atualiza o estado local E o Firebase
                   setState(() {
-                    _items[index] = updatedItem; // Atualiza o item NAQUELE índice
+                    _items[index] = updatedItem;
                   });
                   _updateListInFirebase();
-                  Navigator.pop(context); // Fecha o pop-up
+                  Navigator.pop(context);
                 }
               },
             ),
@@ -176,6 +164,78 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
       },
     );
   }
+
+  // --- MUDANÇA 1: Widget da Barra de Soma ---
+  Widget _buildSummaryBar() {
+    // 1. Calcular os totais
+    double totalPrice = 0.0;
+    double checkedPrice = 0.0;
+
+    for (var item in _items) {
+      if (item.price != null) {
+        totalPrice += item.price!;
+        if (item.isChecked) {
+          checkedPrice += item.price!;
+        }
+      }
+    }
+    
+    // Se não houver preços, não mostra a barra
+    if (totalPrice == 0.0) {
+      return const SizedBox.shrink(); // Retorna widget vazio
+    }
+
+    // 2. Construir o Card
+    return Card(
+      margin: const EdgeInsets.all(8.0),
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Resumo da Lista',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Comprado:', style: TextStyle(fontSize: 14)),
+                Text(
+                  'R\$ ${checkedPrice.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Total Previsto:', style: TextStyle(fontSize: 14)),
+                Text(
+                  'R\$ ${totalPrice.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  // --- FIM MUDANÇA 1 ---
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -186,7 +246,16 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
         onPressed: _showAddItemDialog,
         child: const Icon(Icons.add),
       ),
+      
+      // --- MUDANÇA 2: Adicionar a barra de soma no rodapé ---
+      bottomNavigationBar: _buildSummaryBar(),
+      // --- FIM MUDANÇA 2 ---
+      
       body: ListView.builder(
+        // --- MUDANÇA 3: Adicionar padding para não cobrir o último item ---
+        // (100 é uma estimativa segura para a altura da barra de soma + FAB)
+        padding: const EdgeInsets.only(bottom: 150.0), 
+        // --- FIM MUDANÇA 3 ---
         itemCount: _items.length,
         itemBuilder: (context, index) {
           final item = _items[index];
@@ -234,21 +303,16 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                   : null,
                 value: item.isChecked,
                 
-                // --- INÍCIO DA MUDANÇA (Lógica do onChanged) ---
                 onChanged: (bool? newValue) {
                   if (newValue == null) return;
                   
-                  // Atualiza o estado visual primeiro
                   setState(() {
                     item.isChecked = newValue;
                   });
                   
-                  // Salva a mudança (marcado/desmarcado) no Firebase
                   _updateListInFirebase(); 
 
-                  // SE o item foi MARCADO (true) E tem um preço
                   if (newValue == true && item.price != null && item.price! > 0) {
-                    // Mostra o pop-up de confirmação
                     showDialog(
                       context: context,
                       builder: (dialogContext) {
@@ -263,8 +327,7 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                             ElevatedButton(
                               child: const Text('Sim'),
                               onPressed: () {
-                                Navigator.pop(dialogContext); // Fecha o diálogo
-                                // Navega para a tela de Adicionar, pré-preenchendo os campos
+                                Navigator.pop(dialogContext); 
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -282,7 +345,6 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                     );
                   }
                 },
-                // --- FIM DA MUDANÇA ---
               ),
             ),
           );

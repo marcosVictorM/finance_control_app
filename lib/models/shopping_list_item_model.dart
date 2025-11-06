@@ -20,7 +20,7 @@ class ShoppingListItemModel {
     return {
       'itemName': itemName,
       'link': link,
-      'price': price, // <-- ADICIONADO AO JSON
+      'price': price, 
       'isChecked': isChecked,
     };
   }
